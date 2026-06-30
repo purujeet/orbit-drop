@@ -357,10 +357,44 @@ class GameScene extends Phaser.Scene {
     }
 
     executeEmpShockwave() {
-        this.meteorsGroup.getChildren().forEach(m => {
-            if (m.distanceFromCenter < this.planetRadius + 160) this.time.delayedCall(20, () => this.processMeteorDestruction(m));
+        const cx = this.scale.width / 2;
+        const cy = this.scale.height / 2;
+        
+        // Create shockwave graphics object
+        let shockwave = this.add.graphics();
+        let waveState = { radius: this.planetRadius };
+        
+        this.tweens.add({
+            targets: waveState,
+            radius: this.planetRadius + 220, // Expands past the atmosphere
+            duration: 900,                    // Expanding in a visual, slow-motion pace
+            ease: 'Quad.easeOut',
+            onUpdate: () => {
+                shockwave.clear();
+                // Fade line and fill opacity as it expands
+                let progress = (waveState.radius - this.planetRadius) / 220;
+                let alpha = 1 - progress;
+                
+                shockwave.lineStyle(5, 0x00ffff, alpha * 0.9);
+                shockwave.fillStyle(0x00ffff, alpha * 0.15);
+                shockwave.fillCircle(cx, cy, waveState.radius);
+                shockwave.strokeCircle(cx, cy, waveState.radius);
+                
+                // Destroy meteors as the wave reaches them
+                let activeMeteors = [...this.meteorsGroup.getChildren()];
+                activeMeteors.forEach(m => {
+                    if (m.active && m.distanceFromCenter <= waveState.radius) {
+                        this.processMeteorDestruction(m);
+                    }
+                });
+            },
+            onComplete: () => {
+                shockwave.destroy();
+            }
         });
-        this.cameras.main.flash(200, 0, 255, 255);
+        
+        // Subtle screen flash to accompany the explosion
+        this.cameras.main.flash(150, 0, 255, 255, false);
     }
 
     executeRepulsorPush() {
