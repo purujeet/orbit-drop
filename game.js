@@ -69,15 +69,12 @@ class GameScene extends Phaser.Scene {
         this.planet.add(this.turret);
 
         this.shieldGraphics = this.add.graphics();
+        this.uiGraphics = this.add.graphics(); // Initialize dynamic UI graphics
         this.bulletsGroup = this.add.group();
         this.meteorsGroup = this.add.group();
         this.powerUpsGroup = this.add.group();
 
-        this.scoreText = this.add.text(25, 25, `SCORE: ${this.score}`, { fontSize: '20px', fill: '#ffffff', fontFamily: 'monospace', fontWeight: 'bold' });
-        this.waveText = this.add.text(this.scale.width - 140, 25, `WAVE: ${this.level}`, { fontSize: '20px', fill: '#ffcc00', fontFamily: 'monospace', fontWeight: 'bold' });
-        this.powerUpStatusText = this.add.text(25, 55, 'SYSTEM: NOMINAL', { fontSize: '13px', fill: '#00ffcc', fontFamily: 'monospace' });
-
-        this.pauseButton = this.add.text(this.scale.width - 45, 35, '⏸', { fontSize: '24px', fill: '#00ffcc', fontFamily: 'monospace', backgroundColor: '#111125', padding: { x: 10, y: 5 } })
+        this.pauseButton = this.add.text(40, 35, '⏸', { fontSize: '24px', fill: '#00ffcc', fontFamily: 'monospace', backgroundColor: '#111125', padding: { x: 10, y: 5 } })
             .setOrigin(0.5)
             .setInteractive({ useHandCursor: true });
             
@@ -87,6 +84,10 @@ class GameScene extends Phaser.Scene {
             event.stopPropagation();
             this.togglePause();
         });
+
+        this.scoreText = this.add.text(80, 20, `SCORE: ${this.score}`, { fontSize: '20px', fill: '#ffffff', fontFamily: 'monospace', fontWeight: 'bold' });
+        this.waveText = this.add.text(this.scale.width - 145, 20, `WAVE: ${this.level}`, { fontSize: '20px', fill: '#ffcc00', fontFamily: 'monospace', fontWeight: 'bold' });
+        this.powerUpStatusText = this.add.text(80, 48, 'SYSTEM: NOMINAL', { fontSize: '13px', fill: '#00ffcc', fontFamily: 'monospace' });
     }
 
     update(time, delta) {
@@ -97,6 +98,7 @@ class GameScene extends Phaser.Scene {
         this.handleMeteorSpawning(time);
         this.physicsSystemUpdate(time);
         this.drawShieldLayer();
+        this.drawUI(time);
     }
 
     handleMotionTracking() {
@@ -425,6 +427,53 @@ class GameScene extends Phaser.Scene {
         if (this.hasOrbitalShield) {
             this.shieldGraphics.lineStyle(4, 0x00ffcc, 0.55);
             this.shieldGraphics.strokeCircle(this.scale.width / 2, this.scale.height / 2, this.planetRadius + 9);
+        }
+    }
+
+    drawUI(time) {
+        this.uiGraphics.clear();
+        
+        // 1. Draw Wave Progress Bar (Right Side)
+        const rx = this.scale.width - 145;
+        const ry = 48;
+        const rWidth = 120;
+        const rHeight = 6;
+        
+        let waveProgress = Phaser.Math.Clamp(this.meteorsDestroyedThisWave / this.meteorsNeededForNextWave, 0, 1);
+        
+        // Track background
+        this.uiGraphics.fillStyle(0x111125, 1);
+        this.uiGraphics.fillRect(rx, ry, rWidth, rHeight);
+        this.uiGraphics.lineStyle(1, 0x555577, 0.5);
+        this.uiGraphics.strokeRect(rx, ry, rWidth, rHeight);
+        
+        // Fill track (yellow/orange for wave progress)
+        if (waveProgress > 0) {
+            this.uiGraphics.fillStyle(0xffcc00, 0.8);
+            this.uiGraphics.fillRect(rx + 1, ry + 1, (rWidth - 2) * waveProgress, rHeight - 2);
+        }
+        
+        // 2. Draw Power-up Duration Progress Bar (Left Side)
+        if (this.activePowerUp) {
+            const lx = 80;
+            const ly = 73;
+            const lWidth = 150;
+            const lHeight = 6;
+            
+            let remaining = this.powerUpTimer - time;
+            let powerProgress = Phaser.Math.Clamp(remaining / 7000, 0, 1);
+            
+            // Track background
+            this.uiGraphics.fillStyle(0x111125, 1);
+            this.uiGraphics.fillRect(lx, ly, lWidth, lHeight);
+            this.uiGraphics.lineStyle(1, 0x555577, 0.5);
+            this.uiGraphics.strokeRect(lx, ly, lWidth, lHeight);
+            
+            // Fill track (cyan for active power)
+            if (powerProgress > 0) {
+                this.uiGraphics.fillStyle(0x00ffcc, 0.8);
+                this.uiGraphics.fillRect(lx + 1, ly + 1, (lWidth - 2) * powerProgress, lHeight - 2);
+            }
         }
     }
 
