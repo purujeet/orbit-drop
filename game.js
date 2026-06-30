@@ -42,7 +42,7 @@ class GameScene extends Phaser.Scene {
 
     init() {
         this.score = 0; this.level = 1; this.nextSpawnTime = 0; this.lastFiredTime = 0;
-        this.isGameOver = false; this.speedMultiplier = 1.0; this.activePowerUp = null;
+        this.isGameOver = false; this.isPaused = false; this.speedMultiplier = 1.0; this.activePowerUp = null;
         this.powerUpTimer = 0; this.fireRateModifier = 1.0; this.hasOrbitalShield = false;
         this.shieldHitPoints = 0; this.isSlowMoActive = false; this.isExplosiveActive = false;
         
@@ -76,10 +76,21 @@ class GameScene extends Phaser.Scene {
         this.scoreText = this.add.text(25, 25, `SCORE: ${this.score}`, { fontSize: '20px', fill: '#ffffff', fontFamily: 'monospace', fontWeight: 'bold' });
         this.waveText = this.add.text(this.scale.width - 140, 25, `WAVE: ${this.level}`, { fontSize: '20px', fill: '#ffcc00', fontFamily: 'monospace', fontWeight: 'bold' });
         this.powerUpStatusText = this.add.text(25, 55, 'SYSTEM: NOMINAL', { fontSize: '13px', fill: '#00ffcc', fontFamily: 'monospace' });
+
+        this.pauseButton = this.add.text(this.scale.width - 45, 35, '⏸', { fontSize: '24px', fill: '#00ffcc', fontFamily: 'monospace', backgroundColor: '#111125', padding: { x: 10, y: 5 } })
+            .setOrigin(0.5)
+            .setInteractive({ useHandCursor: true });
+            
+        this.pauseButton.on('pointerover', () => this.pauseButton.setFill('#ff0055'));
+        this.pauseButton.on('pointerout', () => this.pauseButton.setFill('#00ffcc'));
+        this.pauseButton.on('pointerdown', (pointer, localX, localY, event) => {
+            event.stopPropagation();
+            this.togglePause();
+        });
     }
 
     update(time, delta) {
-        if (this.isGameOver) return;
+        if (this.isGameOver || this.isPaused) return;
 
         this.handleMotionTracking();
         this.handleAutomaticShooting(time);
@@ -89,6 +100,7 @@ class GameScene extends Phaser.Scene {
     }
 
     handleMotionTracking() {
+        if (this.isPaused) return;
         const cx = this.scale.width / 2;
         const cy = this.scale.height / 2;
         const pointer = this.input.activePointer;
@@ -285,6 +297,42 @@ class GameScene extends Phaser.Scene {
         this.powerUpStatusText.setText('SYSTEM: NOMINAL').setFill('#00ffcc');
     }
 
+    togglePause() {
+        if (this.isGameOver) return;
+        this.isPaused = !this.isPaused;
+        if (this.isPaused) {
+            this.pauseButton.setText('▶');
+            this.pauseStartTime = this.time.now;
+            
+            this.pauseOverlay = this.add.graphics();
+            this.pauseOverlay.fillStyle(0x030307, 0.7);
+            this.pauseOverlay.fillRect(0, 0, this.scale.width, this.scale.height);
+            
+            this.pauseText = this.add.text(this.scale.width / 2, this.scale.height / 2, 'GAME PAUSED', { 
+                fontSize: '36px', 
+                fill: '#00ffcc', 
+                fontWeight: 'bold', 
+                fontFamily: 'monospace' 
+            }).setOrigin(0.5);
+            
+            this.tweens.pauseAll();
+        } else {
+            this.pauseButton.setText('⏸');
+            
+            let pauseDuration = this.time.now - this.pauseStartTime;
+            this.nextSpawnTime += pauseDuration;
+            this.lastFiredTime += pauseDuration;
+            if (this.powerUpTimer > 0) {
+                this.powerUpTimer += pauseDuration;
+            }
+            
+            if (this.pauseOverlay) this.pauseOverlay.destroy();
+            if (this.pauseText) this.pauseText.destroy();
+            
+            this.tweens.resumeAll();
+        }
+    }
+
     triggerNextWaveIntermission() {
         this.waveIntermissionActive = true;
         this.meteorsDestroyedThisWave = 0;
@@ -293,6 +341,7 @@ class GameScene extends Phaser.Scene {
         this.meteorsNeededForNextWave = Math.floor(10 + (this.level * 2));
 
         this.bulletsGroup.clear(true, true);
+        this.meteorsGroup.clear(true, true); // Clear active meteoroids on wave transition
 
         let banner = this.add.text(this.scale.width / 2, this.scale.height / 2 - 60, `WAVE ${this.level - 1} CLEARED`, { fontSize: '32px', fill: '#00ffcc', fontFamily: 'monospace', fontWeight: 'bold' }).setOrigin(0.5);
         let subBanner = this.add.text(this.scale.width / 2, this.scale.height / 2 - 10, 'PREPARE SYSTEMS', { fontSize: '16px', fill: '#ffffff', fontFamily: 'monospace' }).setOrigin(0.5);
@@ -370,6 +419,7 @@ class GameScene extends Phaser.Scene {
 
     triggerGameOver() {
         this.isGameOver = true; 
+        if (this.pauseButton) this.pauseButton.destroy();
         this.triggerHapticFeedback([300, 100, 300]); 
         this.cameras.main.shake(500, 0.04);
         this.time.delayedCall(600, () => this.scene.start('GameOverScene', { score: this.score }));
