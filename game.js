@@ -282,6 +282,9 @@ class GameScene extends Phaser.Scene {
         if (window.isMultiplayer && window.myRole === 'attacker') {
             window.conn.on('data', (data) => {
                 if (data.type === 'sync') {
+                    const cx = this.scale.width / 2;
+                    const cy = this.scale.height / 2;
+                    
                     this.score = data.score;
                     this.level = data.level;
                     this.planet.rotation = data.planetRotation;
@@ -299,7 +302,7 @@ class GameScene extends Phaser.Scene {
 
                     data.bullets.forEach(b => {
                         let laser = this.add.graphics().fillStyle(b.isPiercing ? 0xcc00ff : 0x00ffcc, 1).fillRect(-2, -8, 4, 16);
-                        laser.x = b.x; laser.y = b.y; laser.rotation = b.rotation;
+                        laser.x = cx + b.x; laser.y = cy + b.y; laser.rotation = b.rotation;
                         this.bulletsGroup.add(laser);
                     });
 
@@ -312,13 +315,13 @@ class GameScene extends Phaser.Scene {
                         else if (m.type === 'EXPLOSIVE') { color = 0xff3300; strokeColor = 0xffff00; }
 
                         meteor.fillStyle(color, 1).lineStyle(2, strokeColor, 1).strokeCircle(0, 0, m.radius).fillCircle(0, 0, m.radius);
-                        meteor.x = m.x; meteor.y = m.y;
+                        meteor.x = cx + m.x; meteor.y = cy + m.y;
                         this.meteorsGroup.add(meteor);
                     });
 
                     data.powerups.forEach(item => {
                         let p = this.add.graphics().fillStyle(0x33ff00, 1).lineStyle(2, 0xffffff, 1).fillCircle(0, 0, 9).strokeCircle(0, 0, 9);
-                        p.x = item.x; p.y = item.y;
+                        p.x = cx + item.x; p.y = cy + item.y;
                         this.powerUpsGroup.add(p);
                     });
                 }
@@ -360,6 +363,8 @@ class GameScene extends Phaser.Scene {
 
     sendStateSync() {
         if (!window.conn) return;
+        const cx = this.scale.width / 2;
+        const cy = this.scale.height / 2;
         window.conn.send({
             type: 'sync',
             score: this.score,
@@ -372,13 +377,13 @@ class GameScene extends Phaser.Scene {
             meteorsDestroyed: this.meteorsDestroyedThisWave,
             meteorsNeeded: this.meteorsNeededForNextWave,
             bullets: this.bulletsGroup.getChildren().map(b => ({
-                x: b.x, y: b.y, rotation: b.rotation, isPiercing: b.isPiercing
+                x: b.x - cx, y: b.y - cy, rotation: b.rotation, isPiercing: b.isPiercing
             })),
             meteors: this.meteorsGroup.getChildren().map(m => ({
-                x: m.x, y: m.y, radius: m.hitRadius, type: m.meteorType
+                x: m.x - cx, y: m.y - cy, radius: m.hitRadius, type: m.meteorType
             })),
             powerups: this.powerUpsGroup.getChildren().map(p => ({
-                x: p.x, y: p.y, type: p.powerUpType
+                x: p.x - cx, y: p.y - cy, type: p.powerUpType
             }))
         });
     }
