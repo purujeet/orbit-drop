@@ -16,6 +16,28 @@ const POWERUP_TYPES = {
     EXPLOSIVE: 'EXPLOSIVE', OVERDRIVE: 'OVERDRIVE', EMP: 'EMP', REPULSOR: 'REPULSOR'
 };
 
+// --- NETWORK STATE ---
+window.isMultiplayer = false;
+window.myRole = 'single'; // 'defender' (host), 'attacker' (client), or 'single'
+window.peer = null;
+window.conn = null;
+
+function generateRoomCode() {
+    let chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+    let code = '';
+    for (let i = 0; i < 4; i++) {
+        code += chars.charAt(Math.floor(Math.random() * chars.length));
+    }
+    return code;
+}
+
+function getMeteorCost(type) {
+    if (type === 'FAST') return 25;
+    if (type === 'TANK') return 40;
+    if (type === 'EXPLOSIVE') return 50;
+    return 15; // STANDARD
+}
+
 // --- SCENE 1: MAIN MENU ---
 class MainMenuScene extends Phaser.Scene {
     constructor() { super({ key: 'MainMenuScene' }); }
