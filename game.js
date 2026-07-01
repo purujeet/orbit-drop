@@ -24,15 +24,138 @@ class MainMenuScene extends Phaser.Scene {
         const cx = this.scale.width / 2;
         const cy = this.scale.height / 2;
         
-        this.add.text(cx, cy - 120, 'ORBIT DEFENDER', { fontSize: 'clamp(28px, 7vw, 54px)', fontWeight: 'bold', fill: '#00ffcc', fontFamily: 'monospace' }).setOrigin(0.5);
-        this.add.text(cx, cy - 50, 'DELUXE UX EDITION', { fontSize: 'clamp(12px, 3.5vw, 18px)', fill: '#ffcc00', fontFamily: 'monospace' }).setOrigin(0.5);
-        this.add.text(cx, cy + 20, 'Mac: Move mouse cursor to aim.\nMobile: Drag finger or tap to steer!', { fontSize: 'clamp(13px, 3.5vw, 15px)', fill: '#ffffff', align: 'center', lineHeight: 1.5 }).setOrigin(0.5);
+        this.add.text(cx, cy - 140, 'ORBIT DEFENDER', { fontSize: 'clamp(28px, 7vw, 54px)', fontWeight: 'bold', fill: '#00ffcc', fontFamily: 'monospace' }).setOrigin(0.5);
+        this.add.text(cx, cy - 80, 'DELUXE MULTIPLAYER', { fontSize: 'clamp(12px, 3.5vw, 18px)', fill: '#ffcc00', fontFamily: 'monospace' }).setOrigin(0.5);
+        this.add.text(cx, cy - 10, 'Mac: Move mouse cursor to aim.\nMobile: Drag finger or tap to steer!', { fontSize: 'clamp(13px, 3.5vw, 15px)', fill: '#ffffff', align: 'center', lineHeight: 1.5 }).setOrigin(0.5);
         
-        const btn = this.add.text(cx, cy + 130, 'START DEFENSE', { fontSize: '20px', fill: '#ff0055', fontWeight: 'bold', backgroundColor: '#111125', padding: { x: 25, y: 12 } }).setOrigin(0.5).setInteractive({ useHandCursor: true });
-        
-        btn.on('pointerdown', () => {
+        // Single Player Button
+        const btnSingle = this.add.text(cx, cy + 70, 'SINGLE PLAYER', { fontSize: '18px', fill: '#ffffff', fontWeight: 'bold', backgroundColor: '#111125', padding: { x: 20, y: 10 } }).setOrigin(0.5).setInteractive({ useHandCursor: true });
+        btnSingle.on('pointerover', () => btnSingle.setFill('#00ffcc'));
+        btnSingle.on('pointerout', () => btnSingle.setFill('#ffffff'));
+        btnSingle.on('pointerdown', () => {
+            window.isMultiplayer = false;
+            window.myRole = 'single';
             this.scene.start('GameScene');
         });
+
+        // Create Multiplayer Room Button
+        const btnCreate = this.add.text(cx, cy + 130, 'CREATE GAME ROOM', { fontSize: '18px', fill: '#ff0055', fontWeight: 'bold', backgroundColor: '#111125', padding: { x: 20, y: 10 } }).setOrigin(0.5).setInteractive({ useHandCursor: true });
+        btnCreate.on('pointerover', () => btnCreate.setFill('#ff5588'));
+        btnCreate.on('pointerout', () => btnCreate.setFill('#ff0055'));
+        btnCreate.on('pointerdown', () => this.handleCreateRoom());
+
+        // Join Multiplayer Room Button
+        const btnJoin = this.add.text(cx, cy + 190, 'JOIN GAME ROOM', { fontSize: '18px', fill: '#ffcc00', fontWeight: 'bold', backgroundColor: '#111125', padding: { x: 20, y: 10 } }).setOrigin(0.5).setInteractive({ useHandCursor: true });
+        btnJoin.on('pointerover', () => btnJoin.setFill('#ffeb3b'));
+        btnJoin.on('pointerout', () => btnJoin.setFill('#ffcc00'));
+        btnJoin.on('pointerdown', () => this.handleJoinRoom());
+    }
+
+    handleCreateRoom() {
+        const code = generateRoomCode();
+        const overlay = document.getElementById('lobby-overlay');
+        const createSec = document.getElementById('lobby-create-section');
+        const joinSec = document.getElementById('lobby-join-section');
+        const status = document.getElementById('lobby-status');
+        const codeDisp = document.getElementById('room-code-display');
+
+        overlay.style.display = 'flex';
+        createSec.style.display = 'block';
+        joinSec.style.display = 'none';
+        codeDisp.innerText = code;
+        status.innerText = 'Creating room in network...';
+
+        window.peer = new Peer('orbit-drop-' + code);
+        
+        window.peer.on('open', () => {
+            status.innerText = 'Room open. Share the code!';
+        });
+
+        window.peer.on('connection', (conn) => {
+            window.conn = conn;
+            window.isMultiplayer = true;
+            window.myRole = 'defender'; // Host is defender
+            status.innerText = 'Player 2 connected! Starting...';
+            
+            window.conn.on('open', () => {
+                setTimeout(() => {
+                    window.conn.send({ type: 'start' });
+                    overlay.style.display = 'none';
+                    this.scene.start('GameScene');
+                }, 1000);
+            });
+        });
+
+        window.peer.on('error', (err) => {
+            console.error(err);
+            status.innerText = 'Lobby Error: ' + err.type;
+        });
+
+        document.getElementById('lobby-back-btn').onclick = () => this.cleanupLobby();
+    }
+
+    handleJoinRoom() {
+        const overlay = document.getElementById('lobby-overlay');
+        const createSec = document.getElementById('lobby-create-section');
+        const joinSec = document.getElementById('lobby-join-section');
+        const status = document.getElementById('lobby-status');
+        const input = document.getElementById('room-code-input');
+        const connectBtn = document.getElementById('join-btn');
+
+        overlay.style.display = 'flex';
+        createSec.style.display = 'none';
+        joinSec.style.display = 'flex';
+        status.innerText = '';
+        input.value = '';
+
+        connectBtn.onclick = () => {
+            const code = input.value.toUpperCase().trim();
+            if (code.length !== 4) {
+                status.innerText = 'Please enter a 4-letter code!';
+                return;
+            }
+            status.innerText = 'Connecting to room...';
+
+            window.peer = new Peer();
+            window.peer.on('open', () => {
+                window.conn = window.peer.connect('orbit-drop-' + code);
+                window.isMultiplayer = true;
+                window.myRole = 'attacker'; // Client is attacker
+
+                window.conn.on('open', () => {
+                    status.innerText = 'Connected! Waiting for host to start...';
+                });
+
+                window.conn.on('data', (data) => {
+                    if (data.type === 'start') {
+                        overlay.style.display = 'none';
+                        this.scene.start('GameScene');
+                    }
+                });
+
+                window.conn.on('close', () => {
+                    status.innerText = 'Disconnected from host.';
+                });
+
+                window.conn.on('error', (err) => {
+                    status.innerText = 'Connection error.';
+                });
+            });
+
+            window.peer.on('error', (err) => {
+                status.innerText = 'Connection initialization failed.';
+            });
+        };
+
+        document.getElementById('lobby-back-btn').onclick = () => this.cleanupLobby();
+    }
+
+    cleanupLobby() {
+        if (window.conn) window.conn.close();
+        if (window.peer) window.peer.destroy();
+        window.isMultiplayer = false;
+        window.myRole = 'single';
+        document.getElementById('lobby-overlay').style.display = 'none';
     }
 }
 
@@ -53,6 +176,11 @@ class GameScene extends Phaser.Scene {
         this.planetRadius = Math.min(this.scale.width, this.scale.height) * 0.08;
         this.atmosphereRadius = Math.min(this.scale.width, this.scale.height) * 0.45;
         this.targetAngle = 0;
+
+        // Multiplayer initialization
+        this.nextSyncTime = 0;
+        this.attackerEnergy = 0;
+        this.selectedMeteorType = 'STANDARD';
     }
 
     create() {
@@ -88,10 +216,111 @@ class GameScene extends Phaser.Scene {
         this.scoreText = this.add.text(80, 20, `SCORE: ${this.score}`, { fontSize: '20px', fill: '#ffffff', fontFamily: 'monospace', fontWeight: 'bold' });
         this.waveText = this.add.text(this.scale.width - 145, 20, `WAVE: ${this.level}`, { fontSize: '20px', fill: '#ffcc00', fontFamily: 'monospace', fontWeight: 'bold' });
         this.powerUpStatusText = this.add.text(80, 48, 'SYSTEM: NOMINAL', { fontSize: '13px', fill: '#00ffcc', fontFamily: 'monospace' });
+
+        if (window.isMultiplayer && window.myRole === 'attacker') {
+            // Draw control buttons for spawning meteors (Client Attacker only)
+            let bx = this.scale.width / 2;
+            let by = this.scale.height - 40;
+            this.btnStd = this.add.text(bx - 180, by, 'STD [15]', { fontSize: '14px', fill: '#00ffcc', backgroundColor: '#111125', padding: { x: 8, y: 5 } }).setOrigin(0.5).setInteractive({ useHandCursor: true });
+            this.btnFast = this.add.text(bx - 60, by, 'FAST [25]', { fontSize: '14px', fill: '#ffffff', backgroundColor: '#111125', padding: { x: 8, y: 5 } }).setOrigin(0.5).setInteractive({ useHandCursor: true });
+            this.btnTank = this.add.text(bx + 60, by, 'TANK [40]', { fontSize: '14px', fill: '#ffffff', backgroundColor: '#111125', padding: { x: 8, y: 5 } }).setOrigin(0.5).setInteractive({ useHandCursor: true });
+            this.btnExpl = this.add.text(bx + 180, by, 'EXPL [50]', { fontSize: '14px', fill: '#ffffff', backgroundColor: '#111125', padding: { x: 8, y: 5 } }).setOrigin(0.5).setInteractive({ useHandCursor: true });
+            this.energyText = this.add.text(25, this.scale.height - 40, 'ENERGY: 0', { fontSize: '16px', fill: '#ffcc00', fontFamily: 'monospace', fontWeight: 'bold' });
+
+            this.btnStd.on('pointerdown', (p, lx, ly, e) => { e.stopPropagation(); this.selectedMeteorType = 'STANDARD'; });
+            this.btnFast.on('pointerdown', (p, lx, ly, e) => { e.stopPropagation(); this.selectedMeteorType = 'FAST'; });
+            this.btnTank.on('pointerdown', (p, lx, ly, e) => { e.stopPropagation(); this.selectedMeteorType = 'TANK'; });
+            this.btnExpl.on('pointerdown', (p, lx, ly, e) => { e.stopPropagation(); this.selectedMeteorType = 'EXPLOSIVE'; });
+
+            // Pointer input to send spawn trigger
+            this.input.on('pointerdown', (pointer) => {
+                if (pointer.y > this.scale.height - 80 || this.isPaused) return;
+                
+                let cost = getMeteorCost(this.selectedMeteorType);
+                if (this.attackerEnergy >= cost) {
+                    this.attackerEnergy -= cost;
+                    let angle = Phaser.Math.Angle.Between(this.scale.width / 2, this.scale.height / 2, pointer.x, pointer.y);
+                    window.conn.send({ type: 'spawn', meteorType: this.selectedMeteorType, angle: angle });
+                }
+            });
+        }
+
+        // Host listener for inbound spawns
+        if (window.isMultiplayer && window.myRole === 'defender') {
+            window.conn.on('data', (data) => {
+                if (data.type === 'spawn') {
+                    this.spawnMultiplayerMeteor(data.meteorType, data.angle);
+                }
+            });
+        }
+
+
+
+        // Client listener for host sync states
+        if (window.isMultiplayer && window.myRole === 'attacker') {
+            window.conn.on('data', (data) => {
+                if (data.type === 'sync') {
+                    this.score = data.score;
+                    this.level = data.level;
+                    this.planet.rotation = data.planetRotation;
+                    this.hasOrbitalShield = data.hasShield;
+                    this.shieldHitPoints = data.shieldHp;
+                    this.activePowerUp = data.powerUp;
+                    this.powerUpTimer = data.powerUpTimer;
+                    this.meteorsDestroyedThisWave = data.meteorsDestroyed;
+                    this.meteorsNeededForNextWave = data.meteorsNeeded;
+
+                    // Sync graphics objects
+                    this.bulletsGroup.clear(true, true);
+                    this.meteorsGroup.clear(true, true);
+                    this.powerUpsGroup.clear(true, true);
+
+                    data.bullets.forEach(b => {
+                        let laser = this.add.graphics().fillStyle(b.isPiercing ? 0xcc00ff : 0x00ffcc, 1).fillRect(-2, -8, 4, 16);
+                        laser.x = b.x; laser.y = b.y; laser.rotation = b.rotation;
+                        this.bulletsGroup.add(laser);
+                    });
+
+                    data.meteors.forEach(m => {
+                        let meteor = this.add.graphics();
+                        let color = 0x594a4a;
+                        let strokeColor = 0xff5533;
+                        if (m.type === 'FAST') { color = 0x00ffff; strokeColor = 0xffffff; }
+                        else if (m.type === 'TANK') { color = 0x734a12; strokeColor = 0xff0000; }
+                        else if (m.type === 'EXPLOSIVE') { color = 0xff3300; strokeColor = 0xffff00; }
+
+                        meteor.fillStyle(color, 1).lineStyle(2, strokeColor, 1).strokeCircle(0, 0, m.radius).fillCircle(0, 0, m.radius);
+                        meteor.x = m.x; meteor.y = m.y;
+                        this.meteorsGroup.add(meteor);
+                    });
+
+                    data.powerups.forEach(item => {
+                        let p = this.add.graphics().fillStyle(0x33ff00, 1).lineStyle(2, 0xffffff, 1).fillCircle(0, 0, 9).strokeCircle(0, 0, 9);
+                        p.x = item.x; p.y = item.y;
+                        this.powerUpsGroup.add(p);
+                    });
+                }
+            });
+        }
     }
 
     update(time, delta) {
         if (this.isGameOver || this.isPaused) return;
+
+        if (window.isMultiplayer && window.myRole === 'attacker') {
+            // Client side logic
+            this.attackerEnergy = Math.min(100, this.attackerEnergy + delta * 0.01); // Regenerates 10 energy per second
+            this.energyText.setText(`ENERGY: ${Math.floor(this.attackerEnergy)}`);
+
+            // Highlight selected button
+            this.btnStd.setFill(this.selectedMeteorType === 'STANDARD' ? '#00ffcc' : '#ffffff');
+            this.btnFast.setFill(this.selectedMeteorType === 'FAST' ? '#00ffcc' : '#ffffff');
+            this.btnTank.setFill(this.selectedMeteorType === 'TANK' ? '#00ffcc' : '#ffffff');
+            this.btnExpl.setFill(this.selectedMeteorType === 'EXPLOSIVE' ? '#00ffcc' : '#ffffff');
+            
+            this.drawUI(time);
+            return;
+        }
 
         this.handleMotionTracking();
         this.handleAutomaticShooting(time);
@@ -99,10 +328,41 @@ class GameScene extends Phaser.Scene {
         this.physicsSystemUpdate(time);
         this.drawShieldLayer();
         this.drawUI(time);
+
+        // Host state broadcast
+        if (window.isMultiplayer && window.myRole === 'defender' && time > this.nextSyncTime) {
+            this.nextSyncTime = time + 50;
+            this.sendStateSync();
+        }
+    }
+
+    sendStateSync() {
+        if (!window.conn) return;
+        window.conn.send({
+            type: 'sync',
+            score: this.score,
+            level: this.level,
+            planetRotation: this.planet.rotation,
+            hasShield: this.hasOrbitalShield,
+            shieldHp: this.shieldHitPoints,
+            powerUp: this.activePowerUp,
+            powerUpTimer: this.powerUpTimer,
+            meteorsDestroyed: this.meteorsDestroyedThisWave,
+            meteorsNeeded: this.meteorsNeededForNextWave,
+            bullets: this.bulletsGroup.getChildren().map(b => ({
+                x: b.x, y: b.y, rotation: b.rotation, isPiercing: b.isPiercing
+            })),
+            meteors: this.meteorsGroup.getChildren().map(m => ({
+                x: m.x, y: m.y, radius: m.hitRadius, type: m.meteorType
+            })),
+            powerups: this.powerUpsGroup.getChildren().map(p => ({
+                x: p.x, y: p.y, type: p.powerUpType
+            }))
+        });
     }
 
     handleMotionTracking() {
-        if (this.isPaused) return;
+        if (this.isPaused || (window.isMultiplayer && window.myRole === 'attacker')) return;
         const cx = this.scale.width / 2;
         const cy = this.scale.height / 2;
         const pointer = this.input.activePointer;
@@ -159,7 +419,7 @@ class GameScene extends Phaser.Scene {
     }
 
     handleMeteorSpawning(time) {
-        if (this.waveIntermissionActive || time < this.nextSpawnTime) return;
+        if (window.isMultiplayer || this.waveIntermissionActive || time < this.nextSpawnTime) return;
 
         this.spawnMeteoroid();
         const interval = GAME_CONFIG.SPAWN_INTERVAL - (this.level * 40); // More gradual decrease in spawn interval
@@ -167,17 +427,41 @@ class GameScene extends Phaser.Scene {
     }
 
     spawnMeteoroid() {
+        this.spawnMultiplayerMeteor('STANDARD', Phaser.Math.FloatBetween(0, Math.PI * 2));
+    }
+
+    spawnMultiplayerMeteor(type, angle) {
         const cx = this.scale.width / 2;
         const cy = this.scale.height / 2;
-        const angle = Phaser.Math.FloatBetween(0, Math.PI * 2);
         
         let meteor = this.add.graphics();
-        const size = Phaser.Math.Between(18, 36);
         
-        meteor.fillStyle(0x594a4a, 1).lineStyle(2, 0xff5533, 1).strokeCircle(0, 0, size / 2).fillCircle(0, 0, size / 2);
+        let size = 24; // Standard size
+        let hitPoints = 1;
+        let color = 0x594a4a;
+        let strokeColor = 0xff5533;
+        
+        if (type === 'FAST') {
+            size = 14;
+            color = 0x00ffff; // Cyan
+            strokeColor = 0xffffff;
+        } else if (type === 'TANK') {
+            size = 38;
+            hitPoints = 3;
+            color = 0x734a12; // Dark brown
+            strokeColor = 0xff0000;
+        } else if (type === 'EXPLOSIVE') {
+            size = 26;
+            color = 0xff3300; // Red-orange
+            strokeColor = 0xffff00;
+        }
+        
+        meteor.fillStyle(color, 1).lineStyle(2, strokeColor, 1).strokeCircle(0, 0, size / 2).fillCircle(0, 0, size / 2);
         meteor.distanceFromCenter = this.atmosphereRadius;
         meteor.spawnAngle = angle;
         meteor.hitRadius = size / 2;
+        meteor.hitPoints = hitPoints;
+        meteor.meteorType = type;
 
         meteor.x = cx + Math.cos(angle) * meteor.distanceFromCenter;
         meteor.y = cy + Math.sin(angle) * meteor.distanceFromCenter;
@@ -188,8 +472,8 @@ class GameScene extends Phaser.Scene {
     physicsSystemUpdate(time) {
         const cx = this.scale.width / 2;
         const cy = this.scale.height / 2;
-        let meteorSpeed = GAME_CONFIG.METEOR_BASE_SPEED * this.speedMultiplier;
-        if (this.isSlowMoActive) meteorSpeed *= 0.5;
+        let baseSpeed = GAME_CONFIG.METEOR_BASE_SPEED * this.speedMultiplier;
+        if (this.isSlowMoActive) baseSpeed *= 0.5;
 
         if (this.activePowerUp && time > this.powerUpTimer) this.clearPowerUpState();
 
@@ -213,13 +497,19 @@ class GameScene extends Phaser.Scene {
         });
 
         this.meteorsGroup.getChildren().forEach(m => {
-            m.distanceFromCenter -= meteorSpeed;
+            let speed = baseSpeed;
+            if (m.meteorType === 'FAST') speed *= 1.8;
+            else if (m.meteorType === 'TANK') speed *= 0.6;
+            else if (m.meteorType === 'EXPLOSIVE') speed *= 0.9;
+
+            m.distanceFromCenter -= speed;
             m.x = cx + Math.cos(m.spawnAngle) * m.distanceFromCenter;
             m.y = cy + Math.sin(m.spawnAngle) * m.distanceFromCenter;
 
             if (m.distanceFromCenter <= this.planetRadius + m.hitRadius) {
                 if (this.hasOrbitalShield) {
-                    this.shieldHitPoints--;
+                    let damage = m.meteorType === 'EXPLOSIVE' ? 3 : 1;
+                    this.shieldHitPoints -= damage;
                     this.triggerHapticFeedback(100);
                     this.createExplosionEffect(m.x, m.y, 0x00ffcc, 8);
                     this.meteorsGroup.remove(m); m.destroy();
@@ -234,7 +524,15 @@ class GameScene extends Phaser.Scene {
             this.meteorsGroup.getChildren().forEach(m => {
                 if (Phaser.Math.Distance.Between(b.x, b.y, m.x, m.y) < m.hitRadius + 5) {
                     if (!b.isPiercing) { this.bulletsGroup.remove(b); b.destroy(); }
-                    this.processMeteorDestruction(m);
+                    
+                    if (m.hitPoints && m.hitPoints > 1) {
+                        m.hitPoints--;
+                        this.createExplosionEffect(b.x, b.y, 0xffaa00, 5);
+                        this.triggerHapticFeedback(20);
+                        m.setScale(0.8 + 0.2 * (m.hitPoints / 3));
+                    } else {
+                        this.processMeteorDestruction(m);
+                    }
                 }
             });
         });
@@ -243,6 +541,15 @@ class GameScene extends Phaser.Scene {
     processMeteorDestruction(meteor) {
         this.createExplosionEffect(meteor.x, meteor.y, 0xffaa00, meteor.hitRadius);
         this.triggerHapticFeedback(40);
+
+        if (meteor.meteorType === 'EXPLOSIVE') {
+            this.meteorsGroup.getChildren().forEach(target => {
+                if (target !== meteor && Phaser.Math.Distance.Between(meteor.x, meteor.y, target.x, target.y) < 100) {
+                    this.time.delayedCall(40, () => this.processMeteorDestruction(target));
+                }
+            });
+            this.createExplosionEffect(meteor.x, meteor.y, 0xff3300, 20);
+        }
 
         if (this.isExplosiveActive) {
             this.meteorsGroup.getChildren().forEach(target => {
@@ -505,6 +812,25 @@ class GameScene extends Phaser.Scene {
         if (this.pauseButton) this.pauseButton.destroy();
         this.triggerHapticFeedback([300, 100, 300]); 
         this.cameras.main.shake(500, 0.04);
+
+        if (window.isMultiplayer && window.conn) {
+            window.conn.send({
+                type: 'sync',
+                score: this.score,
+                level: this.level,
+                planetRotation: this.planet.rotation,
+                hasShield: false,
+                shieldHp: 0,
+                powerUp: null,
+                powerUpTimer: 0,
+                meteorsDestroyed: this.meteorsDestroyedThisWave,
+                meteorsNeeded: this.meteorsNeededForNextWave,
+                bullets: [],
+                meteors: [],
+                powerups: []
+            });
+        }
+
         this.time.delayedCall(600, () => this.scene.start('GameOverScene', { score: this.score }));
     }
 }
@@ -518,8 +844,25 @@ class GameOverScene extends Phaser.Scene {
         this.add.text(cx, cy - 60, 'CORE BREACHED', { fontSize: '36px', fill: '#ff0055', fontWeight: 'bold', fontFamily: 'monospace' }).setOrigin(0.5);
         this.add.text(cx, cy + 10, `FINAL SCORE: ${data.score || 0}`, { fontSize: '20px', fill: '#ffffff', fontFamily: 'monospace' }).setOrigin(0.5);
         
-        const btn = this.add.text(cx, cy + 90, 'REDEPLOY PLANET', { fontSize: '18px', fill: '#00ffcc', backgroundColor: '#111125', padding: { x: 20, y: 10 } }).setOrigin(0.5).setInteractive({ useHandCursor: true });
-        this.input.on('pointerdown', () => this.scene.start('GameScene'));
+        if (!window.isMultiplayer || window.myRole === 'defender') {
+            const btn = this.add.text(cx, cy + 90, 'REDEPLOY PLANET', { fontSize: '18px', fill: '#00ffcc', backgroundColor: '#111125', padding: { x: 20, y: 10 } }).setOrigin(0.5).setInteractive({ useHandCursor: true });
+            btn.on('pointerdown', () => {
+                if (window.isMultiplayer && window.conn) {
+                    window.conn.send({ type: 'start' });
+                }
+                this.scene.start('GameScene');
+            });
+        } else {
+            const status = this.add.text(cx, cy + 90, 'WAITING FOR HOST TO REDEPLOY', { fontSize: '16px', fill: '#8888aa', fontFamily: 'monospace' }).setOrigin(0.5);
+            
+            if (window.conn) {
+                window.conn.on('data', (data) => {
+                    if (data.type === 'start') {
+                        this.scene.start('GameScene');
+                    }
+                });
+            }
+        }
     }
 }
 
